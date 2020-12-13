@@ -1,0 +1,401 @@
+% This is a BPSK modulation-demodulation up-down conversion of the ofdm
+% signal coding where the data bits are transmitted to a singal subcarrier
+% and recover from the receiver side.
+
+clear all;
+close all;
+clc;
+
+
+
+% the number of users to transmit the data
+%nstation=100;
+% we consider here number of packet duplication
+%dup=6;
+% initialize the number of transmit packet
+transmit=0;
+% initialize the number of dedicated transmit packet
+dtransmit=0;
+% set arrival rate
+%lambda array for hold arrival rate
+lambdaArray=[];
+
+%for selected channels array;
+channelArray=[];
+%total random packet reliability stored in this array
+Rreliability=[];
+%total random packet collision stored in this array
+Rcollision=[];
+%total dedicated packet reliability stored in this array
+Dreliability=[];
+%total dedicated packet collision stored in this array
+Dcollision=[];
+%random throughput array
+dcollision=0;
+original_bitstream=[];
+
+transmit_signal=[];
+%initially set total bit error
+totalError=0;
+% initially set all duplication packet error
+finalpacketerr=0;
+%initially set packet duplication  error
+packeterr=0;
+%receiver block activation flag
+receiver_activation=0;
+%initially set the number of received packet
+receivedPacket=0;
+
+rreliability=0;
+rcollision=0;
+dreliability=0;
+ddcollision=0;
+
+stationArray=[];
+% total simulation time
+simulationTime=100;
+% per slot time .1  ms
+slottime=0.0002;
+%total number of slot in a channel
+
+%storing index per transmitted users
+user_array=[];
+% store the selected carrier for the user
+carrierFreq=[]; 
+% store the selected carrier for the user
+DcarrierFreq=[];
+%center frequency list
+fx=[4.7*10^9];
+%center frequency selected by individual packet
+carrierband=[];
+%duplication aray 
+dupArray=[];
+%arrival rate set for each users 
+iaarray=[]; 
+reliability=0;
+dreceive=0;
+%% power calculation parameters for dedicated channels
+c=3*10^8;
+sigma=0.267;
+d0=0.1;
+gama=2.002;
+lembda=c/fx;
+da=1;
+minthresholdpower=39.798;
+%lemda=2;
+%% initially set the interarrival rate of the total number of user
+% check for either the reliability is greater than the 99.999%
+nstation=100;
+pl_array=[];
+% set maximmum channel
+%maxChannel=10;
+maxChannel=100;
+RAchannel=90;
+DAchannel=10;
+dup=7;
+
+for lemda=[100]
+
+iaarray(1:length(iaarray))=[]; % reset the iaarrival rate per execution
+receivedPacket=0; % reset for received packet for arrival rate
+transmit=0;  % reset for transmit packet for each arrival rate
+dtransmit=0; % reset for dedicated transmit packet for each arrival rate 
+finalpacketerr=0;
+dreceive=0;
+dcollision=0;
+rreliability=0;
+rcollision=0;
+dreliability=0;
+ddcollision=0;
+zone=[];
+%Rf=[.1*10^9];%check
+zone=[4,10,16,16,22,22];
+
+ z1=randi([463030,464040]);
+ z2=randi([464042,465055]);
+ z3=randi([465069,467079]);
+ z4=randi([465069,467079]);
+ z5=randi([467082,467099]);
+ z6=randi([467082,467099]);
+ zfrequency=[z1, z2, z3, z4, z5, z6];
+ 
+
+
+for o=1:1:nstation
+transmitTm= transmitTime(lemda,slottime);
+iaarray=[iaarray transmitTm];
+end
+
+minTime=min(iaarray);
+
+currentTime=minTime;
+%disp('arrival rate of transmitter');
+%disp(iaarray);
+%% the simulation run for the simulation time and each slot it checks either a data has to transmit or not
+
+while (currentTime < simulationTime)
+    carrierFreq(1:length(carrierFreq))=[]; % reset the carrier list array
+    carrierband(1:length(carrierband))=[]; % reset the carrier band
+    user_array(1:length(user_array))=[];    % reset the last users index value
+    df=[RAchannel+1:1:maxChannel];         %reset the dedicated node frequency range 
+   % pl_array(1:length( pl_array))=[];   % reset
+% now transmit data on selected slot by different users
+%%for i=1:1:5
+%for o=1:1:20 ----100 node
+%matrix user_array [i][j]
+
+for k=1:1:nstation
+    
+if (currentTime==iaarray(k)) % if slot matched
+    
+    user_array=[user_array k];
+    
+    %for 100 nodes
+    if (rem(k,10)==0) % for only dedicated node access as node 10,20,30,40,50,60,70,80,90,100
+    dtransmit=dtransmit+1;
+    df=randi([RAchannel+1,maxChannel]); %91-100 dedicated sensor   % dedicated carrier selection
+    % power with random noise for dedicated packet transmission
+    GaussRandom= ((2*rand()-1)*sigma);
+    Lfs=20*log10(4*pi)+20*log10(d0)-20*log10(lembda);
+    pl=Lfs+10*gama*log10(da/d0)+GaussRandom;
+    pl_array=[pl_array pl];
+    if(minthresholdpower>pl)
+    dcollision=dcollision+1;
+    
+    elseif(isempty(df)==0)
+    pos = randi (length (df));
+    dfn = df (pos);
+    df=df(df~=dfn);
+    dreceive=dreceive+1;
+    else
+        disp('no available channel to transmit');
+        dcollision=dcollision+1;
+    end
+    
+    else % for random node access as rest of the nodes for 1-99
+    % receiver activation flag on    
+    receiver_activation=1;    
+    % number of transmit data stored
+    transmit=transmit+1;
+    % packet duplication starts
+    for d=1:1:dup   % count number of duplication
+     zoneindex=randi([1,2]); %shan 3,length(zone)
+     channel=zone(zoneindex);
+     
+     up=0;
+     low=0;
+     
+     for s=1:1:zoneindex
+        up=up+zone(s);
+        if(s>1)
+            low=low+zone(s-1);
+        else
+            low=1;
+        end
+     end
+     f=randi([low,up]);
+   % Channelselection=randi([1,25]);
+   % f=randi([Zlow,Zup]);
+    %fx=[3.8*10^9];
+    Szf=zfrequency(zoneindex)*10^4;
+    
+    f_low=Szf;
+    f_up=Szf+(0.2*Szf);
+    Fznew=randi([f_low,f_up]);
+    if(Szf<Fznew)
+        Newf=Szf+(0.2*Szf);
+        req_channel=ceil((channel*Fznew)/f_low);
+        f=f+req_channel;
+    end
+    %Binodon
+     % random carrier chnl selection
+    
+    %random band selection
+    pos = randi (length (fx));
+    fc = fx (pos); %f--
+    %disp(fc);
+    carrierband=[carrierband fc];
+    carrierFreq=[carrierFreq f]; % preserve the carrier frequency list
+    fre=((f*10)*10^3);           % per ccarrier frequency 10khz
+    end
+    
+    end
+end
+end
+%disp('frequency selection for the time');
+%disp(carrierFreq);
+
+%disp(carrierband);
+if(receiver_activation==1)
+    
+%%collision block for selecting frequency
+carrierLength=length(carrierFreq);
+% subcarrier frequency channel chcek block
+    for c=1:1:carrierLength
+        activeflag=0;
+    for g=1:1:carrierLength
+        if (c==g)
+            continue;
+        else
+          if (carrierFreq(c)==carrierFreq(g)&& carrierband(c)==carrierband(g))
+             if(activeflag==0)
+             packeterr=packeterr+1;
+             activeflag=activeflag+1;
+             
+             end
+          end  
+        end
+    end
+    if(rem(c,dup)==0)
+        
+        if (packeterr==dup)
+            finalpacketerr=finalpacketerr+1;
+        else
+            receivedPacket=receivedPacket+1;
+        end
+        packeterr=0;
+    end
+    end 
+receiver_activation=0;
+end
+%%update the inter-arrival rate array per transmission dynamically
+
+if(isempty(user_array)==0)
+for mW=1:1:length(user_array)
+    
+transmitTm= transmitTime(lemda,slottime);
+%disp(transmitTm);
+iaarray(user_array(mW))=iaarray(user_array(mW))+transmitTm;
+minTime=min(iaarray);
+currentTime=minTime;
+end
+end
+%disp('update arrival rate of transmitter');
+%disp(iaarray);
+ %receiver activation flag reset
+
+disp(currentTime);
+
+end
+
+disp('total number of random node packet transmitted');
+disp(transmit);
+disp('total number of packet received');
+disp(receivedPacket);
+disp('total number of packet error');
+disp(finalpacketerr);
+disp('total number of dedicated node packet transmitted')
+disp(dtransmit);
+disp('total dedicated received');
+disp(dreceive);
+disp('total dedicated collision');
+disp(dcollision);
+
+rreliability=(receivedPacket/transmit);
+rcollision=(finalpacketerr/transmit);
+
+dreliability=(dreceive/dtransmit);
+ddcollision=(dcollision/dtransmit);
+
+fid=fopen('HybridReliability1022020.txt','at');
+fprintf(fid, ['----------------------', '\n']);
+fprintf(fid, ['total number of random node packet transmitted', '\n']);
+fprintf(fid, '%f\n', transmit');
+fprintf(fid, ['total number of random node packet received', '\n']);
+fprintf(fid, '%f\n', receivedPacket');
+fprintf(fid, ['total number of random node packet collision', '\n']);
+fprintf(fid, '%f\n', finalpacketerr');
+fprintf(fid, ['total number of dedicated node packet transmitted', '\n']);
+fprintf(fid, '%f\n', dtransmit');
+fprintf(fid, ['total number of dedicated node packet received', '\n']);
+fprintf(fid, '%f\n', dreceive');
+fprintf(fid, ['total number of dedicated node packet collision', '\n']);
+fprintf(fid, '%f\n', dcollision');
+fprintf(fid, ['random node reliability', '\n']);
+fprintf(fid, '%f\n',rreliability');
+fprintf(fid, ['random node collision', '\n']);
+fprintf(fid, '%f\n',rcollision');
+fprintf(fid, ['dedicated node reliability', '\n']);
+fprintf(fid, '%f\n',dreliability');
+fprintf(fid, ['dedicated node collision', '\n']);
+fprintf(fid, '%f\n',ddcollision');
+fprintf(fid, ['duplication', '\n']);
+fprintf(fid, '%f\n', dup');
+fprintf(fid, ['arrival rate', '\n']);
+fprintf(fid, '%f\n', lemda');
+fprintf(fid, ['RAchannel', '\n']);
+fprintf(fid, '%f\n', RAchannel');
+fprintf(fid, ['DAchannel', '\n']);
+fprintf(fid, '%f\n', DAchannel');
+fprintf(fid, ['frequency bands', '\n']);
+fprintf(fid, '%f\n', Fznew');
+disp('channel');
+disp(channel);
+disp('subchnl');
+disp(f);
+disp('Newf');
+disp(Newf);
+disp('Fznew');
+disp(Fznew);
+
+
+fclose(fid);
+
+Rreliability=[Rreliability rreliability];
+
+Rcollision=[Rcollision rcollision];
+
+Dreliability=[Dreliability dreliability];
+
+Dcollision=[Dcollision ddcollision];
+
+lambdaArray=[lambdaArray lemda];
+
+dupArray=[dupArray dup];
+%channelArray=[channelArray maxChannel];
+
+%stationArray=[stationArray nstation];
+%disp('Reliability');
+%disp(reliabilityArray);
+%disp('arrival rate');
+%disp(lambdaArray);
+%disp('number of channel');
+%disp(channelArray);
+%disp('number of transmitter');
+%disp(stationArray);
+%disp('duplication');
+%disp(dupArray);
+
+end
+disp('Final result')
+disp('random reliability');
+disp(Rreliability);
+disp('random collision');
+disp(Rcollision);
+disp('dedicated reliability');
+disp(Dreliability);
+disp('dedicated collision');
+disp(Dcollision);
+disp('arrival rate');
+disp(lambdaArray);
+%disp('number of channel');
+%disp(channelArray);
+disp('duplication');
+disp(dupArray);
+disp('channel');
+disp(channel);
+disp('subchnl');
+disp(f);
+disp('Newf');
+disp(Newf);
+disp('Fznew');
+disp(Fznew);
+%disp(iaarray);
+%disp(pl_array(1:10));
+%% function for next transmission time generation
+
+function nextTransmissionTime = transmitTime(lemda,slottime)
+iarate=-((1/lemda)*log10(rand(1,1)));
+transmittime=slottime*ceil(iarate/slottime);
+nextTransmissionTime=transmittime;
+end 
